@@ -12,19 +12,30 @@ import {
   faChevronUp,
 } from "@fortawesome/free-solid-svg-icons";
 import { faTwitter, faTelegram } from "@fortawesome/free-brands-svg-icons";
-import "./App.css"; // Make sure Fira Code is set for the table in this file
+import "./App.css";
 
 function App() {
   const [tokens, setTokens] = useState([]);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [selectedTokenId, setSelectedTokenId] = useState(null);
 
-  useEffect(() => {
-    // Adjust the endpoint as necessary
+  const fetchData = () => {
     axios
       .get("http://localhost:8000/tokens?with_twitter=true")
       .then((response) => {
         setTokens(response.data);
       })
-      .catch((error) => console.error("There was an error!", error));
+      .catch((error) =>
+        console.error("There was an error fetching the tokens!", error)
+      );
+  };
+
+  // Initial data fetch and setting up the interval for refreshing data
+  useEffect(() => {
+    fetchData();
+    const intervalId = setInterval(fetchData, 60000); // 60000 ms = 1 minute
+
+    return () => clearInterval(intervalId); // Cleanup interval on component unmount
   }, []);
 
   const columns = useMemo(
@@ -119,14 +130,68 @@ function App() {
       {
         Header: "Scam",
         id: "is_scam",
-        accessor: (d) => <FontAwesomeIcon icon={faTrash} />,
+        accessor: (d) => (
+          <button
+            onClick={() => openModal(d.id)}
+            className="text-red-500 hover:text-red-700"
+          >
+            <FontAwesomeIcon icon={faTrash} />
+          </button>
+        ),
       },
     ],
     []
   );
 
-  const { getTableProps, getTableBodyProps, headerGroups, rows, prepareRow } =
-    useTable({ columns, data: tokens }, useSortBy);
+  const {
+    getTableProps,
+    getTableBodyProps,
+    headerGroups,
+    rows,
+    prepareRow,
+    setSortBy,
+  } = useTable(
+    {
+      columns,
+      data: tokens,
+      initialState: { sortBy: [{ id: "created_at", desc: true }] },
+    },
+    useSortBy
+  );
+
+  // Open modal to confirm mark as scam action
+  const openModal = (tokenId) => {
+    console.log("modal open");
+    setIsModalOpen(true);
+    setSelectedTokenId(tokenId);
+  };
+
+  // Close modal
+  const closeModal = () => {
+    setIsModalOpen(false);
+  };
+
+  const markAsScam = () => {
+    // Find the token object by id
+    const token = tokens.find((t) => t.id === selectedTokenId);
+    if (token) {
+      axios
+        .post("http://localhost:8000/mark_scam", {
+          pair_address: token.pair_address,
+        })
+        .then((response) => {
+          console.log("Marked as scam successfully", response);
+          fetchData(); // Refresh the tokens list here to reflect the changes
+          console.log(`marked ${token.pair_address} as scam`);
+        })
+        .catch((error) => {
+          console.error("Error marking as scam", error);
+        })
+        .finally(() => {
+          closeModal();
+        });
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900">
@@ -196,6 +261,31 @@ function App() {
           </div>
         </div>
       </div>
+      {/* Modal for confirming scam action */}
+      {isModalOpen && (
+        <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="bg-white p-4 rounded-lg shadow-lg">
+            <p>Are you sure you want to mark this token as a scam?</p>
+            <div className="flex justify-end space-x-2 mt-3">
+              <button
+                onClick={() => {
+                  markAsScam();
+                  closeModal();
+                }}
+                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors"
+              >
+                Yes
+              </button>
+              <button
+                onClick={closeModal}
+                className="bg-gray-300 text-black px-4 py-2 rounded hover:bg-gray-400 transition-colors"
+              >
+                No
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
