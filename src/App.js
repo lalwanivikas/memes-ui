@@ -21,8 +21,9 @@ function App() {
 
   const fetchData = () => {
     axios
-      .get("http://localhost:8000/tokens?with_twitter=true")
+      .get("http://localhost:8000/tokens")
       .then((response) => {
+        console.log(`fetched ${response.data.length} tokens`);
         setTokens(response.data);
       })
       .catch((error) =>
