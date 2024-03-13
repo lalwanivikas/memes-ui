@@ -1,4 +1,4 @@
-import React, { useMemo, useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import axios from "axios";
 import numeral from "numeral";
 import { formatDistanceToNowStrict } from "date-fns";
@@ -16,8 +16,6 @@ import "./App.css";
 
 function App() {
   const [tokens, setTokens] = useState([]);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [selectedTokenId, setSelectedTokenId] = useState(null);
 
   const fetchData = () => {
     axios
@@ -34,10 +32,41 @@ function App() {
   // Initial data fetch and setting up the interval for refreshing data
   useEffect(() => {
     fetchData();
-    const intervalId = setInterval(fetchData, 60000); // 60000 ms = 1 minute
+    const intervalId = setInterval(fetchData, 30000); // 60000 ms = 1 minute
 
     return () => clearInterval(intervalId); // Cleanup interval on component unmount
   }, []);
+
+  const markAsScam = useCallback(
+    (tokenId) => {
+      console.log(
+        `Attempting to mark token with ID ${tokenId} as scam. Type of tokenId: ${typeof tokenId}`
+      );
+
+      // Ensure tokenId is treated as a number for comparison, given the IDs are numbers
+      const numericTokenId = Number(tokenId);
+
+      const token = tokens.find((t) => t.id === numericTokenId);
+
+      if (token) {
+        console.log(`Token found: `, token);
+        axios
+          .post("http://localhost:8000/mark_scam", {
+            pair_address: token.pair_address,
+          })
+          .then((response) => {
+            console.log("Marked as scam successfully", response);
+            fetchData(); // Refresh the tokens list here to reflect the changes
+          })
+          .catch((error) => {
+            console.error("Error marking as scam", error);
+          });
+      } else {
+        console.error(`No token found with ID ${tokenId}`);
+      }
+    },
+    [tokens]
+  );
 
   const columns = useMemo(
     () => [
@@ -133,7 +162,7 @@ function App() {
         id: "is_scam",
         accessor: (d) => (
           <button
-            onClick={() => openModal(d.id)}
+            onClick={() => markAsScam(d.id)}
             className="text-red-500 hover:text-red-700"
           >
             <FontAwesomeIcon icon={faTrash} />
@@ -141,7 +170,7 @@ function App() {
         ),
       },
     ],
-    []
+    [markAsScam]
   );
 
   const {
@@ -150,7 +179,7 @@ function App() {
     headerGroups,
     rows,
     prepareRow,
-    setSortBy,
+    // Remove setSortBy if unused
   } = useTable(
     {
       columns,
@@ -159,40 +188,6 @@ function App() {
     },
     useSortBy
   );
-
-  // Open modal to confirm mark as scam action
-  const openModal = (tokenId) => {
-    console.log("modal open");
-    setIsModalOpen(true);
-    setSelectedTokenId(tokenId);
-  };
-
-  // Close modal
-  const closeModal = () => {
-    setIsModalOpen(false);
-  };
-
-  const markAsScam = () => {
-    // Find the token object by id
-    const token = tokens.find((t) => t.id === selectedTokenId);
-    if (token) {
-      axios
-        .post("http://localhost:8000/mark_scam", {
-          pair_address: token.pair_address,
-        })
-        .then((response) => {
-          console.log("Marked as scam successfully", response);
-          fetchData(); // Refresh the tokens list here to reflect the changes
-          console.log(`marked ${token.pair_address} as scam`);
-        })
-        .catch((error) => {
-          console.error("Error marking as scam", error);
-        })
-        .finally(() => {
-          closeModal();
-        });
-    }
-  };
 
   return (
     <div className="min-h-screen bg-gray-100 text-gray-900">
@@ -262,31 +257,6 @@ function App() {
           </div>
         </div>
       </div>
-      {/* Modal for confirming scam action */}
-      {isModalOpen && (
-        <div className="absolute top-0 left-0 right-0 bottom-0 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="bg-white p-4 rounded-lg shadow-lg">
-            <p>Are you sure you want to mark this token as a scam?</p>
-            <div className="flex justify-end space-x-2 mt-3">
-              <button
-                onClick={() => {
-                  markAsScam();
-                  closeModal();
-                }}
-                className="bg-red-500 text-white px-4 py-2 rounded hover:bg-red-700 transition-colors"
-              >
-                Yes
-              </button>
-              <button
-                onClick={closeModal}
-                className="bg-gray-300 text-black px-4 py-2 rounded hover:bg-gray-400 transition-colors"
-              >
-                No
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
