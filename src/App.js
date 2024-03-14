@@ -16,25 +16,39 @@ import "./App.css";
 
 function App() {
   const [tokens, setTokens] = useState([]);
+  const [previousTokenCount, setPreviousTokenCount] = useState(0);
+
+  let seenTokenIds = new Set(); // Tracks seen token IDs
 
   const fetchData = () => {
     axios
       .get("http://localhost:8000/tokens")
       .then((response) => {
-        console.log(`fetched ${response.data.length} tokens`);
-        setTokens(response.data);
+        const newTokens = response.data.filter(
+          (token) => !seenTokenIds.has(token.id)
+        );
+        if (newTokens.length > 0 && document.visibilityState === "hidden") {
+          new Notification(`${newTokens.length} more tokens launched`);
+        }
+        newTokens.forEach((token) => seenTokenIds.add(token.id)); // Update seen IDs
+        setTokens(response.data); // Assume you handle deduplication or just re-rendering
       })
       .catch((error) =>
         console.error("There was an error fetching the tokens!", error)
       );
   };
 
-  // Initial data fetch and setting up the interval for refreshing data
   useEffect(() => {
+    Notification.requestPermission().then((permission) => {
+      if (permission === "granted") {
+        console.log("Notification permission granted.");
+      } else {
+        console.log("Notification permission denied.");
+      }
+    });
     fetchData();
-    const intervalId = setInterval(fetchData, 30000); // 60000 ms = 1 minute
-
-    return () => clearInterval(intervalId); // Cleanup interval on component unmount
+    const intervalId = setInterval(fetchData, 30000);
+    return () => clearInterval(intervalId);
   }, []);
 
   const markAsScam = useCallback(
@@ -76,7 +90,7 @@ function App() {
         Cell: ({ value }) => <div className="max-w-xs truncate">{value}</div>,
       },
       {
-        Header: "Launched",
+        Header: "Launched ",
         accessor: "created_at",
         Cell: ({ value }) =>
           formatDistanceToNowStrict(new Date(value), { addSuffix: true }),
@@ -96,7 +110,7 @@ function App() {
           <div
             className={`${
               row.original.current_fdv > row.original.launch_fdv
-                ? "bg-green-100"
+                ? "bg-green-500"
                 : ""
             } p-2`}
           >
@@ -117,7 +131,7 @@ function App() {
           <div
             className={`${
               row.original.current_liquidity > row.original.launch_liquidity
-                ? "bg-green-100"
+                ? "bg-green-500"
                 : ""
             } p-2`}
           >
@@ -126,7 +140,7 @@ function App() {
         ),
       },
       {
-        Header: "External Links",
+        Header: "Socials",
         id: "external_links",
         accessor: (d) => (
           <div className="space-x-4">
@@ -190,73 +204,43 @@ function App() {
   );
 
   return (
-    <div className="min-h-screen bg-gray-100 text-gray-900">
-      <div className="mx-auto" style={{ maxWidth: "fit-content" }}>
-        <div className="bg-white shadow overflow-hidden rounded-lg">
-          <div className="overflow-x-auto">
-            <table {...getTableProps()} className="min-w-full">
-              <thead>
-                {headerGroups.map((headerGroup) => (
-                  <tr
-                    {...headerGroup.getHeaderGroupProps()}
-                    className="bg-gray-200"
-                  >
-                    {headerGroup.headers.map((column) => (
-                      <th
-                        {...column.getHeaderProps(
-                          column.getSortByToggleProps()
-                        )}
-                        className="sticky top-0 z-10 px-6 py-6 text-left text-sm font-semibold text-gray-700 uppercase tracking-wider"
-                      >
-                        {column.render("Header")}
-                        <span>
-                          {column.isSorted ? (
-                            column.isSortedDesc ? (
-                              <FontAwesomeIcon
-                                icon={faChevronDown}
-                                className="ml-2"
-                              />
-                            ) : (
-                              <FontAwesomeIcon
-                                icon={faChevronUp}
-                                className="ml-2"
-                              />
-                            )
-                          ) : (
-                            ""
-                          )}
-                        </span>
-                      </th>
-                    ))}
-                  </tr>
+    <div>
+      <table {...getTableProps()}>
+        <thead>
+          {headerGroups.map((headerGroup) => (
+            <tr {...headerGroup.getHeaderGroupProps()}>
+              {headerGroup.headers.map((column) => (
+                <th {...column.getHeaderProps(column.getSortByToggleProps())}>
+                  {column.render("Header")}
+                  <span>
+                    {column.isSorted ? (
+                      column.isSortedDesc ? (
+                        <FontAwesomeIcon icon={faChevronDown} />
+                      ) : (
+                        <FontAwesomeIcon icon={faChevronUp} />
+                      )
+                    ) : (
+                      ""
+                    )}
+                  </span>
+                </th>
+              ))}
+            </tr>
+          ))}
+        </thead>
+        <tbody {...getTableBodyProps()}>
+          {rows.map((row) => {
+            prepareRow(row);
+            return (
+              <tr {...row.getRowProps()}>
+                {row.cells.map((cell) => (
+                  <td {...cell.getCellProps()}>{cell.render("Cell")}</td>
                 ))}
-              </thead>
-              <tbody
-                {...getTableBodyProps()}
-                className="divide-y divide-gray-200"
-              >
-                {rows.map((row) => {
-                  prepareRow(row);
-                  return (
-                    <tr {...row.getRowProps()}>
-                      {row.cells.map((cell) => {
-                        return (
-                          <td
-                            {...cell.getCellProps()}
-                            className="px-6 my-6 whitespace-nowrap text-sm text-gray-800"
-                          >
-                            {cell.render("Cell")}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
     </div>
   );
 }
